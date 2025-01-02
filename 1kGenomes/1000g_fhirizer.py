@@ -71,6 +71,7 @@ def main():
     driver.find_element(By.XPATH, '/html/body/div[2]/app-root/div/div/div/ng-component/div[3]/div/data-collection-filter/div/div[2]/div/div[1]/label').click() # 1000 Genomes 30x on GRCh38 checkbox
     driver.find_element(By.XPATH, '/html/body/div[2]/app-root/div/div/div/ng-component/div[3]/div/data-collection-filter/div/div[2]/div/div[3]/label').click() # 1000 Genomes on GRCh38 checkbox
     driver.find_element(By.XPATH, '/html/body/div[2]/app-root/div/div/div/ng-component/div[3]/div/data-collection-filter/div/div[2]/div/div[5]/label').click() # 1000 Genomes phase 1 release checkbox
+    driver.find_element(By.XPATH, '/html/body/div[2]/app-root/div/div/div/ng-component/div[3]/div/data-collection-filter/div/div[2]/div/div[4]/label').click() # 1000 Genomes phase 3 release
     driver.find_element(By.XPATH, '/html/body/div[2]/app-root/div/div/div/ng-component/div[2]/button[4]').click() # Download the list button
 
     while os.path.isfile(f"{DOWNLOADS}/igsr_samples.tsv") == False:

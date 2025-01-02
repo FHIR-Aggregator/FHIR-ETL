@@ -103,7 +103,7 @@ def main():
         subject_json_strings.append(convert_to_fhir_subject(row))
 
     subject_json_dict_list = [json.loads(json_str) for json_str in subject_json_strings]
-    with open('subject_fhirized.json', 'w') as f:
+    with open('Gtex_subject_fhirized.json', 'w') as f:
         json.dump(subject_json_dict_list, f, indent=4)
     print("Conversion of subject complete, see output dir for subject_fhirized.json")
 
@@ -114,7 +114,7 @@ def main():
         sample_json_strings.append(convert_to_fhir_sample(row))
 
     sample_json_dict_list = [json.loads(json_str) for json_str in sample_json_strings]
-    with open('sample_fhirized.json', 'w') as f:
+    with open('Gtex_sample_fhirized.json', 'w') as f:
         json.dump(sample_json_dict_list, f, indent=4)
     print("Conversion of sample complete, see output dir for sample_fhirized.json")
 

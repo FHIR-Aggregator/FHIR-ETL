@@ -1,4 +1,4 @@
 # FHIR-ETL
-This repository's goal is to extract from the broader set of sources that Cancer Data Aggregator pulls its initial data from (**G**enomic **D**ata **C**ommons, **P**roteomic **D**ata **C**ommons, **I**maging **D**ata **C**ommons, **C**ancer **D**ata **S**ervices) and myriad other sources found by our NCPI Aggregator Team, make them all _work nice_ together (via harmonization to borrow the CDA term), convert their harmonized data to a wider FHIR configuration, and make this FHIRized data available to the wider public.
+This repository's goal is to extract data from sources found by the NCPI FHIR Aggregator Team, convert the data therein to the FHIR standard, and make this FHIRized data available to the wider public.
 
 I have FHIRizations for two projects currently, **1000 Genomes** and **GTeX**. More information about each can be found in their folders.

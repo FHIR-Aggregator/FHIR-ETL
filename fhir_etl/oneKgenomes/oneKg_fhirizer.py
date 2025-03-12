@@ -1,16 +1,20 @@
+import os
+import json
+import pandas as pd
+
 from fhir.resources.identifier import Identifier
 from fhir.resources.codeableconcept import CodeableConcept
-from fhir.resources.codeablereference import CodeableReference
 from fhir.resources.extension import Extension
 from fhir.resources.patient import Patient
-from fhir.resources.specimen import Specimen, SpecimenCollection, SpecimenContainer
+from fhir.resources.specimen import Specimen, SpecimenCollection
 from fhir.resources.researchstudy import ResearchStudy
 from fhir.resources.researchsubject import ResearchSubject
-from fhir.resources.fhirtypes import ReferenceType, QuantityType
-from uuid import uuid3, uuid5, NAMESPACE_DNS
+from pathlib import Path
+import importlib.resources
+
 import uuid
-import pandas as pd
-import json
+from uuid import uuid3, uuid5, NAMESPACE_DNS
+
 
 THOUSAND_GENOMES = 'https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/'
 
@@ -43,16 +47,19 @@ class IDHelper: # pilfered from https://github.com/FHIR-Aggregator/CDA2FHIR/blob
         return str(uuid5(self.namespace, f"{self.project_id}/{identifier_string}"))
 
 def output_to_ndjson(json_str_list, filename):
+    meta_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'onekgenomes' / 'META' ))
+    output_path = os.path.join(meta_path, f"{filename}.ndjson")
+
     if filename == 'ResearchStudy':
-        with open(f'{filename}.ndjson', 'w') as f:
+        with open(output_path, 'w') as f:
             json_string = json.dumps(json_str_list)
             f.write(json_string + "\n")
     else:
-        with open(f'{filename}.ndjson', 'w') as f:
+        with open(output_path, 'w') as f:
             for entry in json_str_list:
                 json_string = json.dumps(entry)
                 f.write(json_string + "\n")
-    print(f"Conversion complete, see output dir for {filename}.ndjson")
+    print(f"Conversion complete, see output dir for {output_path}")
 
 def convert_to_fhir_subject(input_row):
     IDMakerInstance = IDHelper()
@@ -87,9 +94,13 @@ def convert_to_fhir_subject(input_row):
         )
 
     extensions.append(Extension(**{
-        "url": "http://fhir-aggregator.org/fhir/StructureDefinition/part-of-study", 
-        "valueReference": 
-        {"reference": IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{THOUSAND_GENOMES}", "technical/working/20130606_sample_info/"]), "value": "1KG"}), "ResearchStudy")}}))
+        "url": "http://fhir-aggregator.org/fhir/StructureDefinition/part-of-study",
+        "valueReference": {
+            "reference": "ResearchStudy/" + IDMakerInstance.mint_id(Identifier(
+                **{"system": "".join([f"https://{THOUSAND_GENOMES}", "technical/working/20130606_sample_info/"]),
+                   "value": "1KG"}), "ResearchStudy")
+        }
+    }))
 
     if extensions:
         ncpi_participant.extension = extensions
@@ -153,8 +164,10 @@ def convert_to_fhir_specimen(input_row):
                     }
                 ]
             },
-        "subject": {"reference": IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{THOUSAND_GENOMES}", "technical/working/20130606_sample_info/"]), "value": str(input_row['Sample'])}), "Patient")} if pd.notna(input_row['Sample']) else "Not specified",
-        "collection": SpecimenCollection(**{         
+        "subject": {
+            "reference": f"Patient/{IDMakerInstance.mint_id(Identifier(**{'system': ''.join([f'https://{THOUSAND_GENOMES}', 'technical/working/20130606_sample_info/']), 'value': str(input_row['Sample'])}), 'Patient')}"
+        } if pd.notna(input_row['Sample']) else "Not specified",
+        "collection": SpecimenCollection(**{
             "method": CodeableConcept(**{
                 "coding": [
                     {
@@ -190,17 +203,16 @@ def convert_to_fhir_specimen(input_row):
 
     extensions = []
     extensions.append(Extension(**{
-        "url": "http://fhir-aggregator.org/fhir/StructureDefinition/part-of-study", 
+        "url": "http://fhir-aggregator.org/fhir/StructureDefinition/part-of-study",
         "valueReference": {
-            "reference": IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{THOUSAND_GENOMES}", "technical/working/20130606_sample_info/"]), "value": "1KG"}), "ResearchStudy")
-            }
-        })
-    )
+            "reference": f"ResearchStudy/{IDMakerInstance.mint_id(Identifier(**{'system': ''.join([f'https://{THOUSAND_GENOMES}', 'technical/working/20130606_sample_info/']), 'value': '1KG'}), 'ResearchStudy')}"
+        }
+    }))
 
     ncpi_sample.extension = extensions
     return json.dumps(ncpi_sample.dict(), indent = 4)
 
-def main():        
+def transform_1k():
     sample_df = pd.read_csv('https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20130606_sample_info/20130606_sample_info.txt', sep='\t') 
     # sample_df.to_csv('20130606_sample_info.csv', index=False)
 
@@ -245,6 +257,3 @@ def main():
     output_to_ndjson(sample_json_dict_list, 'Specimen')
     print("Converting researchstudy_json_dict to ResearchStudy.ndjson")
     output_to_ndjson(ncpi_researchstudy.dict(), 'ResearchStudy')
-
-if __name__ == "__main__":
-    main()

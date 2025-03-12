@@ -1,7 +1,0 @@
-fhir.resources==8.0.0b4
-pandas
-requests
-orjson
-click
-halo
-gen3-tracker>=0.0.7rc2 

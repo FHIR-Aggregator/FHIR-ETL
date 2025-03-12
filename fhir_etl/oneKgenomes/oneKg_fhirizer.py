@@ -9,6 +9,8 @@ from fhir.resources.patient import Patient
 from fhir.resources.specimen import Specimen, SpecimenCollection
 from fhir.resources.researchstudy import ResearchStudy
 from fhir.resources.researchsubject import ResearchSubject
+from pathlib import Path
+import importlib.resources
 
 import uuid
 from uuid import uuid3, uuid5, NAMESPACE_DNS
@@ -44,23 +46,9 @@ class IDHelper: # pilfered from https://github.com/FHIR-Aggregator/CDA2FHIR/blob
         """create a UUID from an identifier, insert project_id."""
         return str(uuid5(self.namespace, f"{self.project_id}/{identifier_string}"))
 
-# def output_to_ndjson(json_str_list, filename):
-#     if filename == 'ResearchStudy':
-#         with open(f'{filename}.ndjson', 'w') as f:
-#             json_string = json.dumps(json_str_list)
-#             f.write(json_string + "\n")
-#     else:
-#         with open(f'{filename}.ndjson', 'w') as f:
-#             for entry in json_str_list:
-#                 json_string = json.dumps(entry)
-#                 f.write(json_string + "\n")
-#     print(f"Conversion complete, see output dir for {filename}.ndjson")
-
 def output_to_ndjson(json_str_list, filename):
-    meta_dir = "1kgenomes/META"
-    os.makedirs(meta_dir, exist_ok=True)
-
-    output_path = os.path.join(meta_dir, f"{filename}.ndjson")
+    meta_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'onekgenomes' / 'META' ))
+    output_path = os.path.join(meta_path, f"{filename}.ndjson")
 
     if filename == 'ResearchStudy':
         with open(output_path, 'w') as f:
@@ -224,7 +212,7 @@ def convert_to_fhir_specimen(input_row):
     ncpi_sample.extension = extensions
     return json.dumps(ncpi_sample.dict(), indent = 4)
 
-def main():        
+def transform_1k():
     sample_df = pd.read_csv('https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20130606_sample_info/20130606_sample_info.txt', sep='\t') 
     # sample_df.to_csv('20130606_sample_info.csv', index=False)
 
@@ -269,6 +257,3 @@ def main():
     output_to_ndjson(sample_json_dict_list, 'Specimen')
     print("Converting researchstudy_json_dict to ResearchStudy.ndjson")
     output_to_ndjson(ncpi_researchstudy.dict(), 'ResearchStudy')
-
-if __name__ == "__main__":
-    main()

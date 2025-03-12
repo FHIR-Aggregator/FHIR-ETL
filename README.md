@@ -24,14 +24,13 @@ pip install -e .
 
 #### 1kGenomes
 ```commandline
-python 1kgenomes/1000g_fhirizer.py
-python 1kgenomes/document_references.py
+fhir_etl transform -p 1kgenomes
 ```
 
 ### Validate generated FHIR data
 
 ```commandline
-python cli.py validate --path 1kgenomes/META
+fhir_etl validate --path fhir_etl/oneKgenomes/META
 
 {'summary': {'DocumentReference': 48, 'Specimen': 3500, 'ResearchStudy': 1, 'ResearchSubject': 3500, 'Group': 1, 'Patient': 3500}}
 ```

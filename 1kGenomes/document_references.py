@@ -21,6 +21,9 @@ from uuid import uuid3, uuid5, NAMESPACE_DNS
 import decimal
 import importlib
 
+import mimetypes
+mimetypes.add_type('text/vcf', '.vcf')
+
 # -------------------------
 # helper functions
 # -------------------------
@@ -86,6 +89,11 @@ def parse_mdtm(mdtm_str):
         return mod_time.isoformat()
     except Exception:
         return datetime.now().isoformat()
+
+def get_mime_type(file_name):
+    """Get mime type from file name."""
+    return mimetypes.guess_type(file_name, strict=False)[0] or 'application/octet-stream'
+
 
 # -------------------------
 # create DocumentReference from VCFs
@@ -154,7 +162,7 @@ def create_document_reference(file_row):
 
     # attachment dictionary, file_size can't be  zero
     attachment = {
-        "contentType": "text/vcf",
+        "contentType": get_mime_type(file_name),
         "url": base_url2,
         "title": "file:///" + file_name
     }

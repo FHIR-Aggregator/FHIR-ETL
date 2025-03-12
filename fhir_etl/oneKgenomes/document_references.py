@@ -220,12 +220,21 @@ def transform_1k_files():
     group_identifier = Identifier(**{"system": "".join([f"https://{utils.THOUSAND_GENOMES}", "technical/working/20130606_sample_info/"]), "value": header_url})
     group_id = IDMakerInstance.mint_id(group_identifier, "Group")
 
+    extensions = []
+    extensions.append(Extension(**{
+        "url": "http://fhir-aggregator.org/fhir/StructureDefinition/part-of-study",
+        "valueReference": {
+            "reference": f"ResearchStudy/{IDMakerInstance.mint_id(Identifier(**{'system': ''.join([f'https://{utils.THOUSAND_GENOMES}', 'technical/working/20130606_sample_info/']), 'value': '1KG'}), 'ResearchStudy')}"
+        }
+    }))
+
     group_resource = Group(**{
         "id": group_id,
         "identifier": [group_identifier],
         "membership": "definitional",
         "type": "specimen",
-        "member": [{"entity": {"reference": sid}} for sid in specimen_ids]
+        "member": [{"entity": {"reference": sid}} for sid in specimen_ids],
+        "extension": extensions
         })
 
     for doc_ref in doc_refs:

@@ -34,6 +34,6 @@ fhir_etl transform -p gtex
 fhir_etl validate --path fhir_etl/oneKgenomes/META
 {'summary': {'DocumentReference': 48, 'Specimen': 3500, 'ResearchStudy': 1, 'ResearchSubject': 3500, 'Group': 1, 'Patient': 3500}}
 
-fhir_etl validate --path fhir_etl/GTeX/META
+fhir_etl validate --path fhir_etl/GTEx/META
 {'summary': {'DocumentReference': 49, 'Specimen': 43559, 'ResearchStudy': 1, 'ResearchSubject': 980, 'Group': 1, 'Patient': 980}}
 ```

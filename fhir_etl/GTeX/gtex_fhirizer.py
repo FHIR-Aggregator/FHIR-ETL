@@ -310,7 +310,7 @@ def convert_to_fhir_docref(fileset_desc_df, input_row):
 
     return json.dumps(ncpi_file.model_dump(), indent = 4)
 
-def gtex_fhirizer():
+def transform_gtex():
     subject_endpoint = "https://gtexportal.org/api/v2/dataset/subject"
     sample_endpoint = "https://gtexportal.org/api/v2/dataset/sample"
     file_endpoint = "https://gtexportal.org/api/v2/dataset/fileList"

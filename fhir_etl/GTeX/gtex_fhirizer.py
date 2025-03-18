@@ -4,13 +4,19 @@ from fhir.resources.codeablereference import CodeableReference
 from fhir.resources.extension import Extension
 from fhir.resources.patient import Patient
 from fhir.resources.specimen import Specimen, SpecimenCollection
+from fhir.resources.documentreference import DocumentReference
+from fhir.resources.group import Group
 from fhir.resources.researchstudy import ResearchStudy
 from fhir.resources.researchsubject import ResearchSubject
 from uuid import uuid3, uuid5, NAMESPACE_DNS
 import uuid
+from pathlib import Path
+import importlib.resources
 import pandas as pd
 import json
 import requests
+import os
+import mimetypes
 
 GTEX_SITE = 'gtexportal.org/home/'
 
@@ -43,8 +49,12 @@ class IDHelper: # pilfered from https://github.com/FHIR-Aggregator/CDA2FHIR/blob
         return str(uuid5(self.namespace, f"{self.project_id}/{identifier_string}"))
 
 def retrieve_paginated_gtex_data(api_endpoint):
+    if api_endpoint == 'https://gtexportal.org/api/v2/dataset/fileList':
+        return 
+
     page = 0
     all_data = []
+
     try: # there is a chance that GTEx's API is down for a particular parameter set. If this happens, coming back the next day *usually* solves the problem. Or adjust 'datasetId' on both line 49 and 60 to gtex_v8
         response = requests.get(api_endpoint, params={'datasetId': 'gtex_v10', 'itemsPerPage': 100, 'page': page}).json()
     except requests.exceptions.RequestException as e:
@@ -60,19 +70,32 @@ def retrieve_paginated_gtex_data(api_endpoint):
         next_response = requests.get(api_endpoint, params={'datasetId': 'gtex_v10', 'itemsPerPage': 100, 'page': page}).json()
         all_data.extend(next_response['data'])
 
-    return all_data
+    return pd.DataFrame(all_data)
+
+def retrieve_file_gtex_data(api_endpoint):
+    file_df_init = pd.DataFrame(requests.get(api_endpoint).json())
+    file_df_v8 = file_df_init.loc[file_df_init['name'] == 'GTEx Analysis V8']
+
+    fileset_list_dict_intermed = file_df_v8['filesets'].values[0]
+    fileset_intermediate = pd.DataFrame(fileset_list_dict_intermed)
+    fileset_final = fileset_intermediate.drop([0]) # drop protected and raw data row, not useful for our purposes.
+   
+    return fileset_final
 
 def output_to_ndjson(json_str_list, filename):
+    meta_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'onekgenomes' / 'META' ))
+    output_path = os.path.join(meta_path, f"{filename}.ndjson")
+
     if filename == 'ResearchStudy':
-        with open(f'{filename}.ndjson', 'w') as f:
+        with open(output_path, 'w') as f:
             json_string = json.dumps(json_str_list)
             f.write(json_string + "\n")
     else:
-        with open(f'{filename}.ndjson', 'w') as f:
+        with open(output_path, 'w') as f:
             for entry in json_str_list:
                 json_string = json.dumps(entry)
                 f.write(json_string + "\n")
-    print(f"Conversion complete, see output dir for {filename}.ndjson")
+    print(f"Conversion complete, see output dir for {output_path}")
 
 def convert_to_fhir_subject(input_row):
     IDMakerInstance = IDHelper()
@@ -118,7 +141,7 @@ def convert_to_fhir_subject(input_row):
     if extensions:
         ncpi_participant.extension = extensions
 
-    return json.dumps(ncpi_participant.dict(), indent = 4)
+    return json.dumps(ncpi_participant.model_dump(), indent = 4)
 
 def convert_to_fhir_researchsubject(input_row):
     IDMakerInstance = IDHelper()
@@ -145,7 +168,7 @@ def convert_to_fhir_researchsubject(input_row):
     )
     ncpi_studyparticipant.extension = extensions
 
-    return json.dumps(ncpi_studyparticipant.dict(), indent = 4)
+    return json.dumps(ncpi_studyparticipant.model_dump(), indent = 4)
 
 def convert_to_fhir_specimen(input_row):
     IDMakerInstance = IDHelper()
@@ -165,7 +188,7 @@ def convert_to_fhir_specimen(input_row):
                 "https://nih-ncpi.github.io/ncpi-fhir-ig-2/StructureDefinition-ncpi-sample.html"
             ]
         },
-        "type": { # why can't I just do method and bodySite like I can do type right here? why god? I'm going to find a way. Note that it's a codeableConcept type like method: 
+        "type": { # why can't I just do method and bodySite like I can do type right here (without a CodeableConcept object declaration? why god? I'm going to find a way. Note that it's a codeableConcept type like method: 
             # https://github.com/nazrulworld/fhir.resources/blob/main/fhir/resources/specimen.py#L241
             "coding": [
                     {
@@ -208,21 +231,80 @@ def convert_to_fhir_specimen(input_row):
     )
 
     ncpi_sample.extension = extensions
-    return json.dumps(ncpi_sample.dict(), indent = 4)
+    return json.dumps(ncpi_sample.model_dump(), indent = 4)
 
-def main():
+def convert_to_fhir_docref(fileset_desc_df, input_row):
+    #print(fileset_desc_df)
+    #print(input_row)
+    IDMakerInstance = IDHelper()
+
+    ncpi_file = DocumentReference(**{
+        "resourceType": "DocumentReference",
+        "id": IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": str(input_row['name'])}), "DocumentReference"),
+        "identifier": [{"use": "official", "system": "https://gtexportal.org/home/downloads/adult-gtex/metadata", "value": input_row['name']}],
+        "version": input_row['release'],
+        "status": "superseded", # the latest gtex release at time of writing is v10, but v10's file associations are not available from the gtex api, so we have to use v8's. too bad!
+        "type" : {
+            "coding": [
+                {
+                    "system": "https://gtexportal.org/api/v2/dataset/fileList",
+                    "code": input_row['type'],
+                    "display": input_row['type']
+                }
+            ]
+        }, # i opt to not include category because the information that would be contained in it is detailed in 'profile' below.
+        "content": [
+            {
+                "attachment": {
+                    "contentType": mimetypes.guess_type(input_row['name'], strict=False)[0] or 'Unknown',
+                    "url": f"https://storage.googleapis.com/adult-gtex/{fileset_desc_df['subpath']}/v8/",
+                    "title": input_row['name']
+                },
+                "profile": [
+                    {
+                        "valueCoding": {
+                            "system": "https://gtexportal.org/home/downloads/adult-gtex/overview",
+                            "code": fileset_desc_df['subpath'],
+                            "display": fileset_desc_df['name']
+                        },
+                    }
+                ]
+            }
+        ],
+    })
+
+    extensions = []
+    extensions.append(Extension(**
+        {"url": "https://nih-ncpi.github.io/ncpi-fhir-ig-2/StructureDefinition-file-size.html",
+        "valueString": input_row['size']} # in bytes
+    ))
+
+    extensions.append(Extension(**{
+        "url": "http://fhir-aggregator.org/fhir/StructureDefinition/part-of-study", 
+        "valueReference": {
+            "reference": "ResearchStudy/" + IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": "GTEX_V10"}), "ResearchStudy")
+            }
+        })
+    )
+    ncpi_file.extension = extensions
+
+    return json.dumps(ncpi_file.model_dump(), indent = 4)
+
+def transform_gtex():
     subject_endpoint = "https://gtexportal.org/api/v2/dataset/subject"
     sample_endpoint = "https://gtexportal.org/api/v2/dataset/sample"
+    file_endpoint = "https://gtexportal.org/api/v2/dataset/fileList"
 
-    subject_data = retrieve_paginated_gtex_data(subject_endpoint)
-    sample_data = retrieve_paginated_gtex_data(sample_endpoint)
-
-    subject_df = pd.DataFrame(subject_data)
     #subject_df.to_csv('gtex_subject.csv', index = False)
     #subject_df = pd.read_csv('gtex_subject.csv')
-    sample_df = pd.DataFrame(sample_data)
     #sample_df.to_csv('gtex_sample.csv', index = False)
     #sample_df = pd.read_csv('gtex_sample.csv')
+    #file_df.to_csv('gtex_file.csv', index = False)
+    #file_df = pd.read_csv('gtex_file.csv')
+
+    subject_df = retrieve_paginated_gtex_data(subject_endpoint)
+    sample_df = retrieve_paginated_gtex_data(sample_endpoint)
+    file_df = retrieve_file_gtex_data(file_endpoint)
 
     IDMakerInstance = IDHelper()
     ncpi_researchstudy = ResearchStudy(**{
@@ -232,15 +314,15 @@ def main():
             "status": "active"
         }
     )
-    extensions = []
-    extensions.append(Extension(**{
+    rstudy_extensions = []
+    rstudy_extensions.append(Extension(**{
         "url": "http://fhir-aggregator.org/fhir/StructureDefinition/part-of-study", 
         "valueReference": {
             "reference": "ResearchStudy/" + IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": "GTEX_V10"}), "ResearchStudy")
             }
         })
     )
-    ncpi_researchstudy.extension = extensions
+    ncpi_researchstudy.extension = rstudy_extensions
 
     #print(ncpi_researchstudy)
     print("Subject dataframe:")
@@ -259,9 +341,20 @@ def main():
     for index, row in sample_df.iterrows():
         sample_json_strings.append(convert_to_fhir_specimen(row))
 
+    print("File dataframe:")
+    print(file_df.head())
+    print("Converting file df to fhirized json")
+    file_json_strings = []
+    for index, row in file_df.iterrows(): # nested iterrows... maybe fix this later. this is supposedly a performance black hole.
+        fileset_desc_df = row[['name', 'subpath']] # descrptivie metadata that is useful later
+        fileset_detail_df = pd.DataFrame.from_dict(row['files'])
+        for index, row in fileset_detail_df.iterrows():
+            file_json_strings.append(convert_to_fhir_docref(fileset_desc_df, row))
+
     subject_json_dict_list = [json.loads(json_str) for json_str in subject_json_strings]
     researchsubject_json_dict_list = [json.loads(json_str) for json_str in researchsubject_json_strings]
     sample_json_dict_list = [json.loads(json_str) for json_str in sample_json_strings]
+    file_json_dict_list = [json.loads(json_str) for json_str in file_json_strings]
 
     print("Converting subject_json_dict to Patient.ndjson")
     output_to_ndjson(subject_json_dict_list, 'Patient')
@@ -269,9 +362,7 @@ def main():
     output_to_ndjson(researchsubject_json_dict_list, 'ResearchSubject')
     print("Converting sample_json_dict to Specimen.ndjson")
     output_to_ndjson(sample_json_dict_list, 'Specimen')
+    print("Converting file_json_dict to DocumentReference.ndjson")
+    output_to_ndjson(file_json_dict_list, 'DocumentReference')
     print("Converting researchstudy_json_dict to ResearchStudy.ndjson")
-    output_to_ndjson(ncpi_researchstudy.dict(), 'ResearchStudy')
-
-
-if __name__ == "__main__":
-    main()
+    output_to_ndjson(ncpi_researchstudy.model_dump(), 'ResearchStudy')

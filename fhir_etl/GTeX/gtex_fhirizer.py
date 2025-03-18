@@ -2,7 +2,7 @@ from typing import Any
 
 from fhir.resources.identifier import Identifier
 from fhir.resources.codeableconcept import CodeableConcept
-from fhir.resources.codeablereference import CodeableReference
+from fhir.resources.reference import Reference
 from fhir.resources.extension import Extension
 from fhir.resources.patient import Patient
 from fhir.resources.specimen import Specimen, SpecimenCollection
@@ -254,7 +254,7 @@ def convert_to_fhir_specimen(input_row):
     ncpi_sample.extension = extensions
     return json.dumps(ncpi_sample.model_dump(), indent = 4)
 
-def convert_to_fhir_docref(fileset_desc_df, input_row):
+def convert_to_fhir_docref(fileset_desc_df, input_row, group_id):
     #print(fileset_desc_df)
     #print(input_row)
     IDMakerInstance = IDHelper()
@@ -264,7 +264,8 @@ def convert_to_fhir_docref(fileset_desc_df, input_row):
         "id": IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": str(input_row['name'])}), "DocumentReference"),
         "identifier": [{"use": "official", "system": "https://gtexportal.org/home/downloads/adult-gtex/metadata", "value": input_row['name']}],
         "version": input_row['release'],
-        "status": "superseded", # the latest gtex release at time of writing is v10, but v10's file associations are not available from the gtex api, so we have to use v8's. too bad!
+        "status": "superseded", # the latest gtex release at time of writing is v10, but v10's file associations are not available from the gtex api, so we have to use v8's. too bad!,
+        "subject": Reference(**{"reference": f"Group/{group_id}"}),
         "type" : {
             "coding": [
                 {
@@ -356,6 +357,8 @@ def transform_gtex(verbose):
     for index, row in subject_df.iterrows():
         subject_json_strings.append(convert_to_fhir_subject(row))
         researchsubject_json_strings.append(convert_to_fhir_researchsubject(row))
+    subject_json_dict_list: list[Any] = [json.loads(json_str) for json_str in subject_json_strings]
+    researchsubject_json_dict_list = [json.loads(json_str) for json_str in researchsubject_json_strings]
 
     if verbose:
         print("Sample dataframe")
@@ -365,29 +368,15 @@ def transform_gtex(verbose):
     sample_json_strings = []
     for index, row in sample_df.iterrows():
         sample_json_strings.append(convert_to_fhir_specimen(row))
-
-    if verbose:
-        print("File dataframe:")
-        print(file_df.head())
-        print("Converting file df to fhirized json")
-    file_json_strings = []
-    for index, row in file_df.iterrows(): # nested iterrows... maybe fix this later. this is supposedly a performance black hole.
-        fileset_desc_df = row[['name', 'subpath']] # descrptivie metadata that is useful later
-        fileset_detail_df = pd.DataFrame.from_dict(row['files'])
-        for index, row in fileset_detail_df.iterrows():
-            file_json_strings.append(convert_to_fhir_docref(fileset_desc_df, row))
-
-    subject_json_dict_list: list[Any] = [json.loads(json_str) for json_str in subject_json_strings]
-    researchsubject_json_dict_list = [json.loads(json_str) for json_str in researchsubject_json_strings]
     sample_json_dict_list = [json.loads(json_str) for json_str in sample_json_strings]
-    file_json_dict_list = [json.loads(json_str) for json_str in file_json_strings]
 
     if verbose:
         print("Preparing Group resource")
     specimen_intersection = group_identifier(sample_json_dict_list)
 
+    group_id = IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": "GTEX_V10"}), "Group")
     ncpi_group = Group(**{
-            "id": IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": "GTEX_V10"}), "Group"),
+            "id": group_id,
             "identifier": [Identifier(**{"system": "".join([f"https://storage.googleapis.com/adult-gtex/", "annotations/v10/metadata-files/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt"]), "value": "GTEX_V10"})],
             "membership": "definitional",
             "type": "specimen",
@@ -404,6 +393,20 @@ def transform_gtex(verbose):
         })
     )
     ncpi_group.extension = group_extensions
+
+    if verbose:
+        print("File dataframe:")
+        print(file_df.head())
+        print("Converting file df to fhirized json")
+
+    file_json_strings = []
+    for index, row in file_df.iterrows(): # nested iterrows... maybe fix this later. this is supposedly a performance black hole.
+        fileset_desc_df = row[['name', 'subpath']] # descrptivie metadata that is useful later
+        fileset_detail_df = pd.DataFrame.from_dict(row['files'])
+        for index, row in fileset_detail_df.iterrows():
+            file_json_strings.append(convert_to_fhir_docref(fileset_desc_df, row, group_id))
+    file_json_dict_list = [json.loads(json_str) for json_str in file_json_strings]
+
     meta_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'GTEx' / 'META' ))
 
     print("Converting subject_json_dict to Patient.ndjson")

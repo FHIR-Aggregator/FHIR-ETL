@@ -310,7 +310,7 @@ def convert_to_fhir_docref(fileset_desc_df, input_row):
 
     return json.dumps(ncpi_file.model_dump(), indent = 4)
 
-def main():
+def gtex_fhirizer():
     subject_endpoint = "https://gtexportal.org/api/v2/dataset/subject"
     sample_endpoint = "https://gtexportal.org/api/v2/dataset/sample"
     file_endpoint = "https://gtexportal.org/api/v2/dataset/fileList"
@@ -410,6 +410,3 @@ def main():
     output_to_ndjson(ncpi_researchstudy.model_dump(), 'ResearchStudy')
     print("Converting group_json_dict to Group.ndjson")
     output_to_ndjson(ncpi_group.model_dump(), 'Group')
-
-if __name__ == '__main__':
-    main()

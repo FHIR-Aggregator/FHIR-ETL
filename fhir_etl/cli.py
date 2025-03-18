@@ -6,6 +6,7 @@ from pathlib import Path
 import importlib.resources
 from fhir_etl.oneKgenomes.oneKg_fhirizer import transform_1k
 from fhir_etl.oneKgenomes.document_references import transform_1k_files
+from fhir_etl.GTEx.gtex_fhirizer import transform_gtex
 
 
 @click.group()
@@ -46,7 +47,8 @@ def validate(debug: bool, path):
 @cli.command('transform')
 @click.option("-p", "--project", default=None,
               help="Project name 1kgenomes or gtex.")
-def transformer(project):
+@click.option("-v", "--verbose", is_flag=True, default=False)
+def transformer(project, verbose):
     assert project in ['1kgenomes', 'gtex']
 
     if project == "1kgenomes":
@@ -55,6 +57,12 @@ def transformer(project):
             os.makedirs(meta_path, exist_ok=True)
         transform_1k()
         transform_1k_files()
+
+    if project == "gtex":
+        meta_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'GTEx' / 'META' ))
+        if not os.path.isdir(meta_path):
+            os.makedirs(meta_path, exist_ok=True)
+        transform_gtex(verbose=verbose)
 
 if __name__ == "__main__":
     cli()

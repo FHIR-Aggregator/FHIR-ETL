@@ -115,7 +115,7 @@ def create_document_reference(file_row):
 
 
 def transform_1k_files():
-    specimen_file = str(Path(importlib.resources.files('fhir_etl').parent / '1kgenomes' / 'META' / 'Specimen.ndjson'))
+    specimen_file = str(Path(importlib.resources.files('fhir_etl').parent /'fhir_etl' / 'oneKgenomes' / 'META' / 'Specimen.ndjson'))
     assert specimen_file, "don't have Specimen.ndjson to derive file subject from..."
 
     ftp_server = "ftp.1000genomes.ebi.ac.uk"
@@ -243,7 +243,7 @@ def transform_1k_files():
     # -------------------------
     # output to ndjson files
     # -------------------------
-    folder_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'onekgenomes' / 'META' ))
+    folder_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'oneKgenomes' / 'META' ))
 
     document_references = {_doc_ref.id: _doc_ref for _doc_ref in doc_refs if _doc_ref}.values()
     fhir_document_references = [orjson.loads(doc_ref.json()) for doc_ref in document_references]

@@ -397,7 +397,6 @@ def gtex_fhirizer():
     )
     ncpi_group.extension = group_extensions
 
-
     print("Converting subject_json_dict to Patient.ndjson")
     output_to_ndjson(subject_json_dict_list, 'Patient')
     print("Converting researchsubject_json_dict to ResearchSubject.ndjson")

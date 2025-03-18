@@ -82,6 +82,27 @@ def retrieve_file_gtex_data(api_endpoint):
    
     return fileset_final
 
+def group_identifier(sample_json_dict):
+    IDMakerInstance = IDHelper()
+
+    sampleAttributesDS_df = pd.read_csv('https://storage.googleapis.com/adult-gtex/annotations/v10/metadata-files/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt')
+    sampleAttributesDS_sampid_stripped = set()
+    for index, row in sampleAttributesDS_df.iterrows():
+        stripped_init = row['SAMPID'].split('-')[3] # 'SM'
+        stripped_end = row['SAMPID'].split('-')[3] # '4JBJ3'
+        sampleAttributesDS_sampid_stripped.add(f"{stripped_init}-{stripped_end}")
+    
+    sample_ids_from_api = set()
+    for record in sample_json_dict:
+        sample_ids_from_api.add(record['identifier']['value'])
+
+    intersection_ids = sampleAttributesDS_sampid_stripped.intersection(sample_ids_from_api)
+    print("intersection id count")
+    print(len(intersection_ids))
+    specimen_ids = ["Specimen/"+ IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": str(id)}), "Specimen") for id in intersection_ids]
+    
+    return specimen_ids
+
 def output_to_ndjson(json_str_list, filename):
     meta_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'onekgenomes' / 'META' ))
     output_path = os.path.join(meta_path, f"{filename}.ndjson")
@@ -355,6 +376,28 @@ def transform_gtex():
     researchsubject_json_dict_list = [json.loads(json_str) for json_str in researchsubject_json_strings]
     sample_json_dict_list = [json.loads(json_str) for json_str in sample_json_strings]
     file_json_dict_list = [json.loads(json_str) for json_str in file_json_strings]
+    
+    print("Preparing Group resource")
+    specimen_intersection = group_identifier(sample_json_dict_list)
+
+    ncpi_group = Group(**{
+            "id": IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": "GTEX_V10"}), "Group"),
+            "identifier": [Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": "GTEX_V10"})],
+            "membership": "definitional",
+            "type": "specimen",
+            "member": [{"entity": {"reference": specimen_id}} for specimen_id in specimen_intersection]
+        }
+    )
+    group_extensions = []
+    group_extensions.append(Extension(**{
+        "url": "http://fhir-aggregator.org/fhir/StructureDefinition/part-of-study", 
+        "valueReference": {
+            "reference": "ResearchStudy/" + IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": "GTEX_V10"}), "ResearchStudy")
+            }
+        })
+    )
+    ncpi_group.extension = group_extensions
+
 
     print("Converting subject_json_dict to Patient.ndjson")
     output_to_ndjson(subject_json_dict_list, 'Patient')
@@ -366,3 +409,5 @@ def transform_gtex():
     output_to_ndjson(file_json_dict_list, 'DocumentReference')
     print("Converting researchstudy_json_dict to ResearchStudy.ndjson")
     output_to_ndjson(ncpi_researchstudy.model_dump(), 'ResearchStudy')
+    print("Converting group_json_dict to Group.ndjson")
+    output_to_ndjson(ncpi_group.model_dump(), 'Group')

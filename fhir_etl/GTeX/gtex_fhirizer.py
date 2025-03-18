@@ -1,3 +1,5 @@
+from typing import Any
+
 from fhir.resources.identifier import Identifier
 from fhir.resources.codeableconcept import CodeableConcept
 from fhir.resources.codeablereference import CodeableReference
@@ -102,8 +104,7 @@ def group_identifier(sample_json_dict):
     
     return specimen_ids
 
-def output_to_ndjson(json_str_list, filename):
-    meta_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'onekgenomes' / 'META' ))
+def output_to_ndjson(json_str_list, filename, meta_path):
     output_path = os.path.join(meta_path, f"{filename}.ndjson")
 
     if filename == 'ResearchStudy' or filename == 'Group':
@@ -310,7 +311,7 @@ def convert_to_fhir_docref(fileset_desc_df, input_row):
 
     return json.dumps(ncpi_file.model_dump(), indent = 4)
 
-def transform_gtex():
+def transform_gtex(verbose):
     subject_endpoint = "https://gtexportal.org/api/v2/dataset/subject"
     sample_endpoint = "https://gtexportal.org/api/v2/dataset/sample"
     file_endpoint = "https://gtexportal.org/api/v2/dataset/fileList"
@@ -344,26 +345,31 @@ def transform_gtex():
     )
     ncpi_researchstudy.extension = rstudy_extensions
 
-    #print(ncpi_researchstudy)
-    print("Subject dataframe:")
-    print(subject_df.head(10))
-    print("Converting subject df to fhirized json")
+    if verbose:
+        #print(ncpi_researchstudy)
+        print("Subject dataframe:")
+        print(subject_df.head(10))
+        print("Converting subject df to fhirized json")
+
     subject_json_strings = []
     researchsubject_json_strings =[]
     for index, row in subject_df.iterrows():
         subject_json_strings.append(convert_to_fhir_subject(row))
         researchsubject_json_strings.append(convert_to_fhir_researchsubject(row))
 
-    print("Sample dataframe")
-    print(sample_df.head(10))
-    print("Converting sample df to fhirized json")
+    if verbose:
+        print("Sample dataframe")
+        print(sample_df.head(10))
+        print("Converting sample df to fhirized json")
+
     sample_json_strings = []
     for index, row in sample_df.iterrows():
         sample_json_strings.append(convert_to_fhir_specimen(row))
 
-    print("File dataframe:")
-    print(file_df.head())
-    print("Converting file df to fhirized json")
+    if verbose:
+        print("File dataframe:")
+        print(file_df.head())
+        print("Converting file df to fhirized json")
     file_json_strings = []
     for index, row in file_df.iterrows(): # nested iterrows... maybe fix this later. this is supposedly a performance black hole.
         fileset_desc_df = row[['name', 'subpath']] # descrptivie metadata that is useful later
@@ -371,12 +377,13 @@ def transform_gtex():
         for index, row in fileset_detail_df.iterrows():
             file_json_strings.append(convert_to_fhir_docref(fileset_desc_df, row))
 
-    subject_json_dict_list = [json.loads(json_str) for json_str in subject_json_strings]
+    subject_json_dict_list: list[Any] = [json.loads(json_str) for json_str in subject_json_strings]
     researchsubject_json_dict_list = [json.loads(json_str) for json_str in researchsubject_json_strings]
     sample_json_dict_list = [json.loads(json_str) for json_str in sample_json_strings]
     file_json_dict_list = [json.loads(json_str) for json_str in file_json_strings]
 
-    print("Preparing Group resource")
+    if verbose:
+        print("Preparing Group resource")
     specimen_intersection = group_identifier(sample_json_dict_list)
 
     ncpi_group = Group(**{
@@ -387,6 +394,7 @@ def transform_gtex():
             "member": [{"entity": {"reference": specimen_id}} for specimen_id in specimen_intersection]
         }
     )
+
     group_extensions = []
     group_extensions.append(Extension(**{
         "url": "http://fhir-aggregator.org/fhir/StructureDefinition/part-of-study", 
@@ -396,16 +404,17 @@ def transform_gtex():
         })
     )
     ncpi_group.extension = group_extensions
+    meta_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'GTEx' / 'META' ))
 
     print("Converting subject_json_dict to Patient.ndjson")
-    output_to_ndjson(subject_json_dict_list, 'Patient')
+    output_to_ndjson(subject_json_dict_list, 'Patient', meta_path)
     print("Converting researchsubject_json_dict to ResearchSubject.ndjson")
-    output_to_ndjson(researchsubject_json_dict_list, 'ResearchSubject')
+    output_to_ndjson(researchsubject_json_dict_list, 'ResearchSubject', meta_path)
     print("Converting sample_json_dict to Specimen.ndjson")
-    output_to_ndjson(sample_json_dict_list, 'Specimen')
+    output_to_ndjson(sample_json_dict_list, 'Specimen', meta_path)
     print("Converting file_json_dict to DocumentReference.ndjson")
-    output_to_ndjson(file_json_dict_list, 'DocumentReference')
+    output_to_ndjson(file_json_dict_list, 'DocumentReference', meta_path)
     print("Converting researchstudy_json_dict to ResearchStudy.ndjson")
-    output_to_ndjson(ncpi_researchstudy.model_dump(), 'ResearchStudy')
+    output_to_ndjson(ncpi_researchstudy.model_dump(), 'ResearchStudy', meta_path)
     print("Converting group_json_dict to Group.ndjson")
-    output_to_ndjson(ncpi_group.model_dump(), 'Group')
+    output_to_ndjson(ncpi_group.model_dump(), 'Group', meta_path)

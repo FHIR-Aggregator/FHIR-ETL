@@ -6,7 +6,7 @@ from pathlib import Path
 import importlib.resources
 from fhir_etl.oneKgenomes.oneKg_fhirizer import transform_1k
 from fhir_etl.oneKgenomes.document_references import transform_1k_files
-from fhir_etl.GTEx.gtex_fhirizer import transform_gtex
+from fhir_etl.GTeX.gtex_fhirizer import transform_gtex
 
 
 @click.group()

@@ -85,20 +85,19 @@ def retrieve_file_gtex_data(api_endpoint):
 def group_identifier(sample_json_dict):
     IDMakerInstance = IDHelper()
 
-    sampleAttributesDS_df = pd.read_csv('https://storage.googleapis.com/adult-gtex/annotations/v10/metadata-files/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt')
+    sampleAttributesDS_df = pd.read_csv('https://storage.googleapis.com/adult-gtex/annotations/v10/metadata-files/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt', low_memory = False, sep = '\t')
     sampleAttributesDS_sampid_stripped = set()
     for index, row in sampleAttributesDS_df.iterrows():
-        stripped_init = row['SAMPID'].split('-')[3] # 'SM'
-        stripped_end = row['SAMPID'].split('-')[3] # '4JBJ3'
+        stripped_init = row['SAMPID'].split('-')[-2] # 'SM'
+        stripped_end = row['SAMPID'].split('-')[-1] # '4JBJ3'
         sampleAttributesDS_sampid_stripped.add(f"{stripped_init}-{stripped_end}")
     
     sample_ids_from_api = set()
     for record in sample_json_dict:
-        sample_ids_from_api.add(record['identifier']['value'])
+        sample_ids_from_api.add(record['identifier'][0]['value'])
 
     intersection_ids = sampleAttributesDS_sampid_stripped.intersection(sample_ids_from_api)
-    print("intersection id count")
-    print(len(intersection_ids))
+    print(f"intersection id count: {len(intersection_ids)}")
     specimen_ids = ["Specimen/"+ IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": str(id)}), "Specimen") for id in intersection_ids]
     
     return specimen_ids
@@ -107,7 +106,7 @@ def output_to_ndjson(json_str_list, filename):
     meta_path = str(Path(importlib.resources.files('fhir_etl').parent / 'fhir_etl' /'onekgenomes' / 'META' ))
     output_path = os.path.join(meta_path, f"{filename}.ndjson")
 
-    if filename == 'ResearchStudy':
+    if filename == 'ResearchStudy' or filename == 'Group':
         with open(output_path, 'w') as f:
             json_string = json.dumps(json_str_list)
             f.write(json_string + "\n")
@@ -311,17 +310,17 @@ def convert_to_fhir_docref(fileset_desc_df, input_row):
 
     return json.dumps(ncpi_file.model_dump(), indent = 4)
 
-def transform_gtex():
+def main():
     subject_endpoint = "https://gtexportal.org/api/v2/dataset/subject"
     sample_endpoint = "https://gtexportal.org/api/v2/dataset/sample"
     file_endpoint = "https://gtexportal.org/api/v2/dataset/fileList"
 
     #subject_df.to_csv('gtex_subject.csv', index = False)
-    #subject_df = pd.read_csv('gtex_subject.csv')
+    #subject_df = pd.read_csv('fhir_etl/gtex/gtex_subject.csv')
     #sample_df.to_csv('gtex_sample.csv', index = False)
-    #sample_df = pd.read_csv('gtex_sample.csv')
+    #sample_df = pd.read_csv('fhir_etl/gtex/gtex_sample.csv')
     #file_df.to_csv('gtex_file.csv', index = False)
-    #file_df = pd.read_csv('gtex_file.csv')
+    #file_df = pd.read_csv('fhir_etl/gtex/gtex_file.csv')
 
     subject_df = retrieve_paginated_gtex_data(subject_endpoint)
     sample_df = retrieve_paginated_gtex_data(sample_endpoint)
@@ -376,13 +375,13 @@ def transform_gtex():
     researchsubject_json_dict_list = [json.loads(json_str) for json_str in researchsubject_json_strings]
     sample_json_dict_list = [json.loads(json_str) for json_str in sample_json_strings]
     file_json_dict_list = [json.loads(json_str) for json_str in file_json_strings]
-    
+
     print("Preparing Group resource")
     specimen_intersection = group_identifier(sample_json_dict_list)
 
     ncpi_group = Group(**{
             "id": IDMakerInstance.mint_id(Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": "GTEX_V10"}), "Group"),
-            "identifier": [Identifier(**{"system": "".join([f"https://{GTEX_SITE}", "downloads/adult-gtex/metadata"]), "value": "GTEX_V10"})],
+            "identifier": [Identifier(**{"system": "".join([f"https://storage.googleapis.com/adult-gtex/", "annotations/v10/metadata-files/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt"]), "value": "GTEX_V10"})],
             "membership": "definitional",
             "type": "specimen",
             "member": [{"entity": {"reference": specimen_id}} for specimen_id in specimen_intersection]
@@ -411,3 +410,6 @@ def transform_gtex():
     output_to_ndjson(ncpi_researchstudy.model_dump(), 'ResearchStudy')
     print("Converting group_json_dict to Group.ndjson")
     output_to_ndjson(ncpi_group.model_dump(), 'Group')
+
+if __name__ == '__main__':
+    main()
